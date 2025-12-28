@@ -1,9 +1,9 @@
 import _ from "lodash";
 
-import { canvasHelpersType } from "./typescript";
+import { canvasHelpersType, editPointType } from "./typescript";
 import { itemDataType } from "./tree";
 
-import { editPointColor, editPointRadius } from "./constants";
+import { activePointColor, editPointColor, editPointRadius } from "./constants";
 
 export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
   const result: string[] = res || [];
@@ -38,16 +38,20 @@ export const canvasHelpers: canvasHelpersType = {
     this.ctx = canvas.getContext("2d");
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
+      if (!isImageEditMode) {
+        this.resetState(canvas);
+        this.selectedPointIndex = null;
+        this.selectedRectIndex = null;
+      }
       if (config && config.images.length) {
         if (this.imgs.length) {
           this.imgs.forEach((element) => element.remove());
           this.imgs = [];
           this.points = [];
         }
-
         Promise.all(
           config.images.map(
-            (imgConf) =>
+            (imgConf, i) =>
               new Promise((resolve) => {
                 const newImg = document.createElement("img");
                 document.body.appendChild(newImg);
@@ -64,28 +68,30 @@ export const canvasHelpers: canvasHelpersType = {
                     img: newImg,
                     isImageEditMode: isImageEditMode,
                     coords: imgConf.coords,
+                    isActive: this.selectedPointIndex === i,
                   });
-                  this.points.push(point);
-                  resolve(undefined);
+                  resolve(point);
                 });
               })
           )
-        ).then(() => {
+        ).then((points) => {
+          this.points = points as editPointType[];
           if (isEditMode && !this.isEditing) {
             canvas.onmousemove = this.editImages({
               canvas,
               setConfig,
+              isImageEditMode,
             });
           }
         });
       }
     }
   },
-  drawImage: function ({ img, isImageEditMode, coords }) {
+  drawImage: function ({ img, isImageEditMode, coords, isActive }) {
     const imgCoords = coords || this.calculateCoords(img);
 
     (this.ctx as CanvasRenderingContext2D).drawImage(img, ...imgCoords);
-    if (isImageEditMode) {
+    if (isImageEditMode && this.ctx) {
       const editRects = [
         new Path2D(),
         new Path2D(),
@@ -93,7 +99,9 @@ export const canvasHelpers: canvasHelpersType = {
         new Path2D(),
       ];
 
-      (this.ctx as CanvasRenderingContext2D).fillStyle = editPointColor;
+      (this.ctx as CanvasRenderingContext2D).fillStyle = isActive
+        ? activePointColor
+        : editPointColor;
 
       editRects.forEach((rect, index) => {
         const pointCoords = this.getPointCoords(imgCoords, index);
@@ -106,50 +114,90 @@ export const canvasHelpers: canvasHelpersType = {
 
     return [imgCoords, []];
   },
-  editImages: function ({ canvas, setConfig }) {
+  editImages: function ({ canvas, setConfig, isImageEditMode }) {
     return (e) => {
-      const isPointInPath = this.points.some((point, index) =>
-        point[1].some((rect, i) => {
-          const isPointInPath = this.isPointInRectCheck({
-            coords: point[0],
-            i,
-            x: e.offsetX,
-            y: e.offsetY,
-          });
-          if (isPointInPath) {
-            this.selectedPointIndex = index;
-            this.selectedRectIndex = i;
-          } else {
-            this.selectedPointIndex = null;
-            this.selectedRectIndex = null;
-          }
+      if (isImageEditMode) {
+        for (let i = this.points.length - 1; i > -1; i--) {
+          this.points[i][1].some((rect, index) => {
+            const isPointInPath = !!this.ctx?.isPointInPath(
+              rect,
+              e.offsetX,
+              e.offsetY
+            );
+            if (isPointInPath) {
+              this.selectedRectIndex = index;
+            } else {
+              this.selectedRectIndex = null;
+            }
 
-          return isPointInPath;
-        })
-      );
-      if (isPointInPath) {
-        canvas.onmousedown = (e: MouseEvent) => {
-          this.isEditing = true;
-          canvas.onmousemove = (e: MouseEvent) => {
-            this.redrawImages({
-              isImageEditMode: true,
-              deltaCoords: [e.movementX, e.movementY],
-            });
+            return isPointInPath;
+          });
+          if (
+            this.isPointInRectCheck({
+              coords: this.points[i][0],
+              x: e.offsetX,
+              y: e.offsetY,
+            })
+          ) {
+            if (this.selectedPointIndex !== i) {
+              this.selectedPointIndex = i;
+              this.redrawImages({ isImageEditMode, deltaCoords: [0, 0] });
+            }
+            break;
+          } else {
+            if (this.selectedPointIndex !== null) {
+              this.selectedPointIndex = null;
+              this.redrawImages({ isImageEditMode, deltaCoords: [0, 0] });
+            }
+          }
+        }
+        if (_.isNumber(this.selectedPointIndex)) {
+          canvas.onmousedown = (e: MouseEvent) => {
+            this.isEditing = true;
+            canvas.onmousemove = (e: MouseEvent) => {
+              this.redrawImages({
+                isImageEditMode: true,
+                deltaCoords: [e.movementX, e.movementY],
+              });
+            };
+            canvas.onmouseup = (e: MouseEvent) => {
+              const pointIndex = _.clone(this.selectedPointIndex);
+              setConfig((config) => ({
+                ...config,
+                images: config.images.map((image, index) => ({
+                  ...image,
+                  coords:
+                    index === pointIndex
+                      ? this.points[index][0]
+                      : image.coords || this.points[index][0],
+                })),
+              }));
+              this.resetState(canvas);
+            };
           };
-          canvas.onmouseup = (e: MouseEvent) => {
-            setConfig((config) => ({
-              ...config,
-              images: config.images.map((image, index) => ({
-                ...image,
-                coords:
-                  index === this.selectedPointIndex
-                    ? this.points[index][0]
-                    : image.coords || this.points[index][0],
-              })),
-            }));
-            this.resetState(canvas);
+          window.onkeyup = (e: KeyboardEvent) => {
+            if (e.key === "Delete") {
+              const pointIndex = _.clone(this.selectedPointIndex) as number;
+              setConfig((config) => ({
+                ...config,
+                images: config.images.filter(
+                  (image, index) => index !== pointIndex
+                ),
+              }));
+              this.resetState(canvas);
+              this.selectedPointIndex = null;
+              this.selectedRectIndex = null;
+            }
           };
-        };
+        } else {
+          this.resetState(canvas);
+          this.selectedRectIndex = null;
+          canvas.onmousemove = this.editImages({
+            canvas,
+            setConfig,
+            isImageEditMode,
+          });
+        }
       }
     };
   },
@@ -167,6 +215,7 @@ export const canvasHelpers: canvasHelpersType = {
           img,
           isImageEditMode,
           coords: this.points[index][0],
+          isActive: this.selectedPointIndex === index,
         });
       });
     }
@@ -208,8 +257,21 @@ export const canvasHelpers: canvasHelpersType = {
           coords[1] + coords[3] + changeCoords[1],
         ];
       default:
-        return [0, 0];
+        return changeCoords;
     }
+  },
+  calculateBorderedCoords: function ({
+    start,
+    length,
+    delta,
+    limitMin,
+    limitMax,
+  }) {
+    return start + delta < limitMin
+      ? limitMin
+      : start + delta + length > limitMax
+      ? limitMax - length
+      : start + delta;
   },
   prepareEditableCoords: function ({ coords, mouseCoords }) {
     switch (this.selectedRectIndex) {
@@ -244,7 +306,24 @@ export const canvasHelpers: canvasHelpersType = {
         ];
       }
       default:
-        return coords;
+        return [
+          this.calculateBorderedCoords({
+            start: coords[0],
+            length: coords[2],
+            delta: mouseCoords[0],
+            limitMax: this.width,
+            limitMin: 0,
+          }),
+          this.calculateBorderedCoords({
+            start: coords[1],
+            length: coords[3],
+            delta: mouseCoords[1],
+            limitMax: this.height,
+            limitMin: 0,
+          }),
+          coords[2],
+          coords[3],
+        ];
     }
   },
   getPointCoords: function (coords, index) {
@@ -269,54 +348,19 @@ export const canvasHelpers: canvasHelpersType = {
         return [0, 0];
     }
   },
-  isPointInRectCheck: function ({ coords, i, x, y }) {
-    switch (i) {
-      case 0:
-        return (
-          x > coords[0] &&
-          x < coords[0] + editPointRadius &&
-          y > coords[1] &&
-          y < coords[1] + editPointRadius
-        );
-      case 1: {
-        return (
-          x < coords[0] + coords[2] &&
-          x > coords[0] + coords[2] - editPointRadius &&
-          y > coords[1] &&
-          y < coords[1] + editPointRadius
-        );
-      }
-      case 2:
-        return (
-          x > coords[0] &&
-          x < coords[0] + editPointRadius &&
-          y < coords[1] + coords[3] &&
-          y > coords[1] + coords[3] - editPointRadius
-        );
-      case 3:
-        return (
-          x < coords[0] + coords[2] &&
-          x > coords[0] + coords[2] - editPointRadius &&
-          y < coords[1] + coords[3] &&
-          y > coords[1] + coords[3] - editPointRadius
-        );
-      case 4:
-        return (
-          x < (coords[0] + coords[2] - editPointRadius) / 2 &&
-          x > (coords[0] + coords[2] + editPointRadius) / 2 &&
-          y < (coords[1] + coords[3] - editPointRadius) / 2 &&
-          y > (coords[1] + coords[3] + editPointRadius) / 2
-        );
-      default:
-        return false;
-    }
+  isPointInRectCheck: function ({ coords, x, y }) {
+    return (
+      x > coords[0] &&
+      x < coords[0] + coords[2] &&
+      y > coords[1] &&
+      y < coords[1] + coords[3]
+    );
   },
   resetState: function (canvas) {
     this.isEditing = false;
     canvas.onmousemove = null;
     canvas.onmousedown = null;
     canvas.onmouseup = null;
-    this.selectedPointIndex = null;
-    this.selectedRectIndex = null;
+    window.onkeyup = null;
   },
 };

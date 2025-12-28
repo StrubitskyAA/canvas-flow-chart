@@ -33,10 +33,12 @@ export type canvasHelpersType = {
     img: HTMLImageElement;
     isImageEditMode: boolean;
     coords: canvasCoordsType | null;
+    isActive: boolean;
   }) => editPointType;
   editImages: (args: {
     canvas: HTMLCanvasElement;
     setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+    isImageEditMode: boolean;
   }) => (e: MouseEvent) => void;
   calculateCoords: (newImg: HTMLImageElement) => canvasCoordsType;
   getPointCoords: (coords: canvasCoordsType, index: number) => [number, number];
@@ -60,8 +62,14 @@ export type canvasHelpersType = {
   resetState: (canvas: HTMLCanvasElement) => void;
   isPointInRectCheck: (args: {
     coords: canvasCoordsType;
-    i: number;
     x: number;
     y: number;
   }) => boolean;
+  calculateBorderedCoords: (args: {
+    start: number;
+    length: number;
+    delta: number;
+    limitMin: number;
+    limitMax: number;
+  }) => number;
 };
