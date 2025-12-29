@@ -1,6 +1,6 @@
 import _ from "lodash";
 
-import { canvasHelpersType, editPointType } from "./typescript";
+import { canvasHelpersType } from "./typescript";
 import { itemDataType } from "./tree";
 
 import { activePointColor, editPointColor, editPointRadius } from "./constants";
@@ -17,29 +17,41 @@ export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
 
 export const canvasHelpers: canvasHelpersType = {
   imgs: [],
+  isEditMode: false,
+  isImageEditMode: false,
   isEditing: false,
   height: 0,
   width: 0,
   ctx: null,
   points: [],
+  canvas: null,
   selectedPointIndex: null,
   selectedRectIndex: null,
+  setEditingMode: function ({
+    isEditMode,
+    isImageEditMode,
+    config,
+    setConfig,
+  }) {
+    this.isEditMode = isEditMode;
+    this.isImageEditMode = isImageEditMode;
+    this.canvasRedrow({ config, setConfig });
+  },
   canvasDrow: function ({
     canvas,
     config,
-    isEditMode,
-    isImageEditMode,
     canvasHeight,
     canvasWidth,
     setConfig,
   }) {
     this.height = canvasHeight;
     this.width = canvasWidth;
+    this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
-      if (!isImageEditMode) {
-        this.resetState(canvas);
+      if (!this.isImageEditMode) {
+        this.resetState();
         this.selectedPointIndex = null;
         this.selectedRectIndex = null;
       }
@@ -64,34 +76,61 @@ export const canvasHelpers: canvasHelpersType = {
                 newImg.setAttribute("class", "hidden back");
                 this.imgs.push(newImg);
                 newImg.addEventListener("load", (e) => {
-                  const point = this.drawImage({
-                    img: newImg,
-                    isImageEditMode: isImageEditMode,
-                    coords: imgConf.coords,
-                    isActive: this.selectedPointIndex === i,
-                  });
-                  resolve(point);
+                  resolve(newImg);
                 });
               })
           )
-        ).then((points) => {
-          this.points = points as editPointType[];
-          if (isEditMode && !this.isEditing) {
-            canvas.onmousemove = this.editImages({
-              canvas,
-              setConfig,
-              isImageEditMode,
+        ).then((imgs) => {
+          imgs.forEach((newImg, i) => {
+            const point = this.drawImage({
+              img: newImg as HTMLImageElement,
+              coords: config.images[i].coords,
+              isActive: this.selectedPointIndex === i,
             });
+
+            this.points.push(point);
+          });
+          if (this.isEditMode && !this.isEditing) {
+            canvas.onmousemove = this.editImages({ setConfig });
           }
         });
       }
     }
   },
-  drawImage: function ({ img, isImageEditMode, coords, isActive }) {
+  canvasRedrow: function ({ config, setConfig }) {
+    if (this.ctx) {
+      this.ctx.clearRect(0, 0, this.width, this.height);
+      if (!this.isImageEditMode) {
+        this.resetState();
+        this.selectedPointIndex = null;
+        this.selectedRectIndex = null;
+      }
+      if (config && config.images.length) {
+        if (this.imgs.length) {
+          this.points = [];
+        }
+        this.imgs.forEach((newImg, i) => {
+          const point = this.drawImage({
+            img: newImg as HTMLImageElement,
+            coords: config.images[i].coords,
+            isActive: this.selectedPointIndex === i,
+          });
+
+          this.points.push(point);
+        });
+        if (this.isEditMode && !this.isEditing) {
+          (this.canvas as HTMLCanvasElement).onmousemove = this.editImages({
+            setConfig,
+          });
+        }
+      }
+    }
+  },
+  drawImage: function ({ img, coords, isActive }) {
     const imgCoords = coords || this.calculateCoords(img);
 
     (this.ctx as CanvasRenderingContext2D).drawImage(img, ...imgCoords);
-    if (isImageEditMode && this.ctx) {
+    if (this.isImageEditMode && this.ctx) {
       const editRects = [
         new Path2D(),
         new Path2D(),
@@ -114,9 +153,9 @@ export const canvasHelpers: canvasHelpersType = {
 
     return [imgCoords, []];
   },
-  editImages: function ({ canvas, setConfig, isImageEditMode }) {
+  editImages: function ({ setConfig }) {
     return (e) => {
-      if (isImageEditMode) {
+      if (this.isImageEditMode) {
         for (let i = this.points.length - 1; i > -1; i--) {
           this.points[i][1].some((rect, index) => {
             const isPointInPath = !!this.ctx?.isPointInPath(
@@ -141,22 +180,22 @@ export const canvasHelpers: canvasHelpersType = {
           ) {
             if (this.selectedPointIndex !== i) {
               this.selectedPointIndex = i;
-              this.redrawImages({ isImageEditMode, deltaCoords: [0, 0] });
+              this.redrawImages({ deltaCoords: [0, 0] });
             }
             break;
           } else {
             if (this.selectedPointIndex !== null) {
               this.selectedPointIndex = null;
-              this.redrawImages({ isImageEditMode, deltaCoords: [0, 0] });
+              this.redrawImages({ deltaCoords: [0, 0] });
             }
           }
         }
         if (_.isNumber(this.selectedPointIndex)) {
+          const canvas = this.canvas as HTMLCanvasElement;
           canvas.onmousedown = (e: MouseEvent) => {
             this.isEditing = true;
             canvas.onmousemove = (e: MouseEvent) => {
               this.redrawImages({
-                isImageEditMode: true,
                 deltaCoords: [e.movementX, e.movementY],
               });
             };
@@ -172,36 +211,39 @@ export const canvasHelpers: canvasHelpersType = {
                       : image.coords || this.points[index][0],
                 })),
               }));
-              this.resetState(canvas);
+              this.resetState();
             };
           };
           window.onkeyup = (e: KeyboardEvent) => {
             if (e.key === "Delete") {
               const pointIndex = _.clone(this.selectedPointIndex) as number;
-              setConfig((config) => ({
-                ...config,
-                images: config.images.filter(
-                  (image, index) => index !== pointIndex
-                ),
-              }));
-              this.resetState(canvas);
+              this.imgs[pointIndex].remove();
+              this.imgs = this.imgs.filter((img, i) => i !== pointIndex);
+
+              setConfig((config) => {
+                return {
+                  ...config,
+                  images: config.images.filter(
+                    (image, index) => index !== pointIndex
+                  ),
+                };
+              });
+              this.resetState();
               this.selectedPointIndex = null;
               this.selectedRectIndex = null;
             }
           };
         } else {
-          this.resetState(canvas);
+          this.resetState();
           this.selectedRectIndex = null;
-          canvas.onmousemove = this.editImages({
-            canvas,
+          (this.canvas as HTMLCanvasElement).onmousemove = this.editImages({
             setConfig,
-            isImageEditMode,
           });
         }
       }
     };
   },
-  redrawImages: function ({ isImageEditMode, deltaCoords }) {
+  redrawImages: function ({ deltaCoords }) {
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
       this.imgs.forEach((img, index) => {
@@ -213,7 +255,6 @@ export const canvasHelpers: canvasHelpersType = {
         }
         this.drawImage({
           img,
-          isImageEditMode,
           coords: this.points[index][0],
           isActive: this.selectedPointIndex === index,
         });
@@ -356,11 +397,13 @@ export const canvasHelpers: canvasHelpersType = {
       y < coords[1] + coords[3]
     );
   },
-  resetState: function (canvas) {
+  resetState: function () {
     this.isEditing = false;
-    canvas.onmousemove = null;
-    canvas.onmousedown = null;
-    canvas.onmouseup = null;
+    if (this.canvas) {
+      this.canvas.onmousemove = null;
+      this.canvas.onmousedown = null;
+      this.canvas.onmouseup = null;
+    }
     window.onkeyup = null;
   },
 };

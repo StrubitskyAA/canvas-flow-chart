@@ -37,17 +37,23 @@ const Canvas: FC = () => {
   }, []);
 
   useEffect(() => {
+    canvasHelpers.setEditingMode({
+      isEditMode,
+      isImageEditMode,
+      config,
+      setConfig,
+    });
+  }, [isImageEditMode, isEditMode, config]);
+  useEffect(() => {
     if (canvasRef.current)
       canvasHelpers.canvasDrow({
         canvas: canvasRef.current as HTMLCanvasElement,
         config,
-        isEditMode,
-        isImageEditMode,
         canvasHeight: wrapHeight,
         canvasWidth: wrapWidth,
         setConfig,
       });
-  }, [config, isImageEditMode, isEditMode]);
+  }, [config.images.length]);
   useEffect(() => {
     if (canvasWrapRef.current) {
       setWrapHeight(canvasWrapRef.current.offsetHeight);
@@ -58,7 +64,7 @@ const Canvas: FC = () => {
   return (
     <Box sx={{ display: "flex", flex: 1, flexDirection: "column" }}>
       <Box>
-        {isEditMode && (
+        {isImageEditMode && (
           <IconButton component="label">
             <AddPhotoAlternateIcon color="primary" />
             <input
@@ -70,7 +76,7 @@ const Canvas: FC = () => {
             />
           </IconButton>
         )}
-        {!!config.images.length && isEditMode && (
+        {isEditMode && (
           <IconButton
             component="label"
             onClick={() => setImageEditMode((mode) => !mode)}

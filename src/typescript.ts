@@ -14,39 +14,44 @@ export type canvasConfigType = {
 export type canvasHelpersType = {
   imgs: HTMLImageElement[];
   isEditing: boolean;
+  isEditMode: boolean;
+  isImageEditMode: boolean;
   height: number;
   width: number;
+  canvas: HTMLCanvasElement | null;
   ctx: CanvasRenderingContext2D | null;
   points: editPointType[];
   selectedPointIndex: number | null;
   selectedRectIndex: number | null;
+  setEditingMode: (atgs: {
+    isEditMode: boolean;
+    isImageEditMode: boolean;
+    config: canvasConfigType;
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+  }) => void;
   canvasDrow: (args: {
     canvas: HTMLCanvasElement;
     config: canvasConfigType;
-    isEditMode: boolean;
-    isImageEditMode: boolean;
     canvasHeight: number;
     canvasWidth: number;
     setConfig: Dispatch<SetStateAction<canvasConfigType>>;
   }) => void;
+  canvasRedrow: (args: {
+    config: canvasConfigType;
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+  }) => void;
   drawImage: (args: {
     img: HTMLImageElement;
-    isImageEditMode: boolean;
     coords: canvasCoordsType | null;
     isActive: boolean;
   }) => editPointType;
   editImages: (args: {
-    canvas: HTMLCanvasElement;
     setConfig: Dispatch<SetStateAction<canvasConfigType>>;
-    isImageEditMode: boolean;
   }) => (e: MouseEvent) => void;
   calculateCoords: (newImg: HTMLImageElement) => canvasCoordsType;
   getPointCoords: (coords: canvasCoordsType, index: number) => [number, number];
   drawEditRects: (rect: Path2D, coords: pointCoordsType) => void;
-  redrawImages: (args: {
-    isImageEditMode: boolean;
-    deltaCoords: pointCoordsType;
-  }) => void;
+  redrawImages: (args: { deltaCoords: pointCoordsType }) => void;
   changeEditableCoords: (args: {
     coords: canvasCoordsType;
     changeCoords: pointCoordsType;
@@ -59,7 +64,7 @@ export type canvasHelpersType = {
     coords: canvasCoordsType;
     mouseCoords: pointCoordsType;
   }) => canvasCoordsType;
-  resetState: (canvas: HTMLCanvasElement) => void;
+  resetState: () => void;
   isPointInRectCheck: (args: {
     coords: canvasCoordsType;
     x: number;
