@@ -10,22 +10,28 @@ import { Box, IconButton } from "@mui/material";
 
 import { canvasConfigType } from "./typescript";
 
-import { defaultCanvasConfig } from "./constants";
+import { defaultCanvasConfig, toolTypesEnum } from "./constants";
 
 import { canvasHelpers } from "./helpers";
 
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import EditIcon from "@mui/icons-material/Edit";
 import ImagesearchRollerIcon from "@mui/icons-material/ImagesearchRoller";
+import ConstructionIcon from "@mui/icons-material/Construction";
+import Crop169Icon from "@mui/icons-material/Crop169";
+import PanoramaFishEyeIcon from "@mui/icons-material/PanoramaFishEye";
+import TimelineIcon from "@mui/icons-material/Timeline";
 
 const Canvas: FC = () => {
   const [isEditMode, setEditMode] = useState<boolean>(false);
   const [isImageEditMode, setImageEditMode] = useState<boolean>(false);
+  const [isToolsEditMode, setToolsEditMode] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasWrapRef = useRef<HTMLCanvasElement | null>(null);
   const [config, setConfig] = useState<canvasConfigType>(defaultCanvasConfig);
   const [wrapHeight, setWrapHeight] = useState<number>(0);
   const [wrapWidth, setWrapWidth] = useState<number>(0);
+  const [toolType, setToolType] = useState<toolTypesEnum | null>(null);
 
   const setImage = useCallback((img: File | null) => {
     if (img) {
@@ -35,25 +41,30 @@ const Canvas: FC = () => {
       }));
     }
   }, []);
+  const setTooltypeHandler = useCallback((type: toolTypesEnum) => {
+    setToolType((toolType) => (toolType === type ? null : type));
+  }, []);
 
   useEffect(() => {
     canvasHelpers.setEditingMode({
       isEditMode,
       isImageEditMode,
+      isToolsEditMode,
+      toolType,
       config,
       setConfig,
     });
-  }, [isImageEditMode, isEditMode, config]);
+  }, [isImageEditMode, isToolsEditMode, isEditMode, config, toolType]);
   useEffect(() => {
     if (canvasRef.current)
       canvasHelpers.canvasDrow({
         canvas: canvasRef.current as HTMLCanvasElement,
         config,
+        setConfig,
         canvasHeight: wrapHeight,
         canvasWidth: wrapWidth,
-        setConfig,
       });
-  }, [config.images.length]);
+  }, [config.images.length, wrapHeight, wrapWidth]);
   useEffect(() => {
     if (canvasWrapRef.current) {
       setWrapHeight(canvasWrapRef.current.offsetHeight);
@@ -64,6 +75,32 @@ const Canvas: FC = () => {
   return (
     <Box sx={{ display: "flex", flex: 1, flexDirection: "column" }}>
       <Box>
+        {isToolsEditMode && (
+          <>
+            <IconButton component="label">
+              <Crop169Icon
+                color={toolType === toolTypesEnum.rect ? "error" : "primary"}
+                onClick={() => setTooltypeHandler(toolTypesEnum.rect)}
+              />
+            </IconButton>
+            <IconButton
+              component="label"
+              onClick={() => setTooltypeHandler(toolTypesEnum.circle)}
+            >
+              <PanoramaFishEyeIcon
+                color={toolType === toolTypesEnum.circle ? "error" : "primary"}
+              />
+            </IconButton>
+            <IconButton
+              component="label"
+              onClick={() => setTooltypeHandler(toolTypesEnum.line)}
+            >
+              <TimelineIcon
+                color={toolType === toolTypesEnum.line ? "error" : "primary"}
+              />
+            </IconButton>
+          </>
+        )}
         {isImageEditMode && (
           <IconButton component="label">
             <AddPhotoAlternateIcon color="primary" />
@@ -77,14 +114,30 @@ const Canvas: FC = () => {
           </IconButton>
         )}
         {isEditMode && (
-          <IconButton
-            component="label"
-            onClick={() => setImageEditMode((mode) => !mode)}
-          >
-            <ImagesearchRollerIcon
-              color={isImageEditMode ? "error" : "primary"}
-            />
-          </IconButton>
+          <>
+            <IconButton
+              component="label"
+              onClick={() => {
+                setToolsEditMode(false);
+                setToolType(null);
+                setImageEditMode((mode) => !mode);
+              }}
+            >
+              <ImagesearchRollerIcon
+                color={isImageEditMode ? "error" : "primary"}
+              />
+            </IconButton>
+            <IconButton
+              component="label"
+              onClick={() => {
+                setImageEditMode(false);
+                setToolType(null);
+                setToolsEditMode((mode) => !mode);
+              }}
+            >
+              <ConstructionIcon color={isToolsEditMode ? "error" : "primary"} />
+            </IconButton>
+          </>
         )}
         <IconButton
           onClick={() =>

@@ -1,9 +1,17 @@
 import _ from "lodash";
 
-import { canvasHelpersType } from "./typescript";
+import { canvasCoordsType, canvasHelpersType } from "./typescript";
 import { itemDataType } from "./tree";
 
-import { activePointColor, editPointColor, editPointRadius } from "./constants";
+import {
+  activePointColor,
+  editPointColor,
+  editPointRadius,
+  minToolLength,
+  toolTypesEnum,
+} from "./constants";
+
+import { getToolLength } from "./calculate-helpers";
 
 export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
   const result: string[] = res || [];
@@ -19,30 +27,41 @@ export const canvasHelpers: canvasHelpersType = {
   imgs: [],
   isEditMode: false,
   isImageEditMode: false,
+  isToolsEditMode: false,
   isEditing: false,
+  toolType: null,
   height: 0,
   width: 0,
   ctx: null,
   points: [],
+  tools: [],
   canvas: null,
   selectedPointIndex: null,
+  selectedToolIndex: null,
   selectedRectIndex: null,
   setEditingMode: function ({
     isEditMode,
     isImageEditMode,
+    isToolsEditMode,
+    toolType,
     config,
     setConfig,
   }) {
     this.isEditMode = isEditMode;
     this.isImageEditMode = isImageEditMode;
-    this.canvasRedrow({ config, setConfig });
+    this.isToolsEditMode = isToolsEditMode;
+    this.toolType = toolType;
+    this.canvasRedraw({ config, setConfig });
+    if (this.canvas && this.isEditMode && !this.isEditing) {
+      this.canvas.onmousemove = this.editCanvas({ setConfig });
+    }
   },
   canvasDrow: function ({
     canvas,
     config,
+    setConfig,
     canvasHeight,
     canvasWidth,
-    setConfig,
   }) {
     this.height = canvasHeight;
     this.width = canvasWidth;
@@ -50,9 +69,10 @@ export const canvasHelpers: canvasHelpersType = {
     this.ctx = canvas.getContext("2d");
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
-      if (!this.isImageEditMode) {
+      if (!this.isImageEditMode && !this.isToolsEditMode) {
         this.resetState();
         this.selectedPointIndex = null;
+        this.selectedToolIndex = null;
         this.selectedRectIndex = null;
       }
       if (config && config.images.length) {
@@ -90,19 +110,47 @@ export const canvasHelpers: canvasHelpersType = {
 
             this.points.push(point);
           });
-          if (this.isEditMode && !this.isEditing) {
-            canvas.onmousemove = this.editImages({ setConfig });
-          }
+
+          this.canvasRedrawTools(config, setConfig);
+        });
+      } else {
+        this.canvasRedrawTools(config, setConfig);
+      }
+    }
+  },
+  editCanvas: function (args) {
+    return (e) => {
+      this.editImages(args)(e);
+      this.editTools(args)(e);
+    };
+  },
+  canvasRedrawTools: function (config, setConfig) {
+    if (config && config.tools.length) {
+      this.tools = config.tools;
+      this.tools.forEach((tool, i) => {
+        this.drawTool({
+          tool,
+          isActive: !this.toolType && this.selectedToolIndex === i,
+        });
+      });
+      if (this.isEditMode && !this.isEditing) {
+        (this.canvas as HTMLCanvasElement).onmousemove = this.editTools({
+          setConfig,
         });
       }
     }
   },
-  canvasRedrow: function ({ config, setConfig }) {
+  canvasRedraw: function ({ config, setConfig }) {
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
       if (!this.isImageEditMode) {
-        this.resetState();
         this.selectedPointIndex = null;
+      }
+      if (!this.isToolsEditMode) {
+        this.selectedToolIndex = null;
+      }
+      if (!this.isToolsEditMode && !this.isImageEditMode) {
+        this.resetState();
         this.selectedRectIndex = null;
       }
       if (config && config.images.length) {
@@ -124,6 +172,7 @@ export const canvasHelpers: canvasHelpersType = {
           });
         }
       }
+      this.canvasRedrawTools(config, setConfig);
     }
   },
   drawImage: function ({ img, coords, isActive }) {
@@ -153,6 +202,105 @@ export const canvasHelpers: canvasHelpersType = {
 
     return [imgCoords, []];
   },
+  editTools: function ({ setConfig }) {
+    return (event) => {
+      if (this.isToolsEditMode && this.canvas) {
+        if (!!this.toolType) {
+          this.canvas.onmousedown = (ev: MouseEvent) => {
+            this.isEditing = true;
+            if (this.toolType) {
+              this.selectedToolIndex = this.tools.length;
+            }
+            (this.canvas as HTMLCanvasElement).onmousemove = (
+              e: MouseEvent
+            ) => {
+              this.updateCanvas({
+                deltaCoords: [e.movementX, e.movementY],
+                startCoords: [ev.offsetX, ev.offsetY],
+                endCoords: [e.offsetX, e.offsetY],
+              });
+            };
+            (this.canvas as HTMLCanvasElement).onmouseup = (e: MouseEvent) => {
+              const tools = _.clone(this.tools);
+              const index = this.selectedToolIndex as number;
+              const length = getToolLength(tools[index]);
+              if (length < minToolLength) {
+                this.tools = tools.filter((tool, i) => index !== i);
+                this.updateCanvas({
+                  deltaCoords: [0, 0],
+                });
+              }
+              setConfig((config) => ({
+                ...config,
+                tools:
+                  length < minToolLength
+                    ? tools.filter((tool, i) => index !== i)
+                    : tools,
+              }));
+              this.selectedToolIndex = null;
+              this.resetState();
+            };
+          };
+        } else {
+          for (let i = this.tools.length - 1; i > -1; i--) {
+            const tool = this.tools[i];
+            const path = tool.path;
+            const isSelectedTool =
+              path &&
+              (!!this.ctx?.isPointInPath(path, event.offsetX, event.offsetY) ||
+                !!this.ctx?.isPointInStroke(
+                  path,
+                  event.offsetX,
+                  event.offsetY
+                ));
+            if (isSelectedTool) {
+              if (this.selectedToolIndex !== i) {
+                this.selectedToolIndex = i;
+                this.updateCanvas({
+                  deltaCoords: [0, 0],
+                  startCoords: [tool.coords[0], tool.coords[1]],
+                  endCoords: [tool.coords[2], tool.coords[3]],
+                });
+              }
+              break;
+            } else {
+              if (this.selectedToolIndex !== null) {
+                this.selectedToolIndex = null;
+                this.updateCanvas({
+                  deltaCoords: [0, 0],
+                  startCoords: [tool.coords[0], tool.coords[1]],
+                  endCoords: [tool.coords[2], tool.coords[3]],
+                });
+              }
+            }
+          }
+          if (this.selectedToolIndex !== null) {
+            this.canvas.onmousedown = (ev: MouseEvent) => {
+              this.isEditing = true;
+              (this.canvas as HTMLCanvasElement).onmousemove = (
+                e: MouseEvent
+              ) => {
+                this.updateCanvas({
+                  deltaCoords: [e.movementX, e.movementY],
+                });
+              };
+              (this.canvas as HTMLCanvasElement).onmouseup = (
+                e: MouseEvent
+              ) => {
+                const tools = _.clone(this.tools);
+                setConfig((config) => ({
+                  ...config,
+                  tools,
+                }));
+                this.selectedToolIndex = null;
+                this.resetState();
+              };
+            };
+          }
+        }
+      }
+    };
+  },
   editImages: function ({ setConfig }) {
     return (e) => {
       if (this.isImageEditMode) {
@@ -180,13 +328,13 @@ export const canvasHelpers: canvasHelpersType = {
           ) {
             if (this.selectedPointIndex !== i) {
               this.selectedPointIndex = i;
-              this.redrawImages({ deltaCoords: [0, 0] });
+              this.updateCanvas({ deltaCoords: [0, 0] });
             }
             break;
           } else {
             if (this.selectedPointIndex !== null) {
               this.selectedPointIndex = null;
-              this.redrawImages({ deltaCoords: [0, 0] });
+              this.updateCanvas({ deltaCoords: [0, 0] });
             }
           }
         }
@@ -195,7 +343,7 @@ export const canvasHelpers: canvasHelpersType = {
           canvas.onmousedown = (e: MouseEvent) => {
             this.isEditing = true;
             canvas.onmousemove = (e: MouseEvent) => {
-              this.redrawImages({
+              this.updateCanvas({
                 deltaCoords: [e.movementX, e.movementY],
               });
             };
@@ -243,23 +391,72 @@ export const canvasHelpers: canvasHelpersType = {
       }
     };
   },
-  redrawImages: function ({ deltaCoords }) {
+  updateCanvas: function ({ deltaCoords, startCoords, endCoords }) {
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
-      this.imgs.forEach((img, index) => {
-        if (this.selectedPointIndex === index) {
-          this.points[index][0] = this.changeEditableCoords({
-            coords: this.points[index][0],
-            changeCoords: deltaCoords,
-          });
-        }
-        this.drawImage({
-          img,
-          coords: this.points[index][0],
-          isActive: this.selectedPointIndex === index,
-        });
+      this.redrawImages({ deltaCoords });
+      this.redrawTools({ deltaCoords, startCoords, endCoords });
+    }
+  },
+  redrawTools: function ({ deltaCoords, startCoords, endCoords }) {
+    if ((this.selectedToolIndex as number) === this.tools.length) {
+      this.tools.push({
+        type: this.toolType as toolTypesEnum,
+        coords: [...(startCoords || [0, 0]), ...(startCoords || [0, 0])],
       });
     }
+    this.tools.forEach((tool, index) => {
+      if (this.selectedToolIndex === index) {
+        tool.coords = this.changeToolsCoords({
+          coords: tool.coords,
+          changeCoords: deltaCoords,
+          startCoords,
+          endCoords,
+          type: tool.type,
+        });
+      }
+      this.drawTool({
+        tool,
+        isActive: !this.toolType && this.selectedToolIndex === index,
+      });
+    });
+  },
+  drawTool: function (args) {
+    if (this.ctx) {
+      this.ctx.beginPath();
+      switch (args.tool.type) {
+        case toolTypesEnum.line: {
+          args.tool.path = this.drawLine(args);
+          break;
+        }
+      }
+    }
+  },
+  drawLine: function ({ tool, isActive }) {
+    const ctx = this.ctx as CanvasRenderingContext2D;
+    const path = new Path2D();
+    path.moveTo(tool.coords[0], tool.coords[1]);
+    path.lineTo(tool.coords[2], tool.coords[3]);
+    ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
+    ctx.lineWidth = editPointRadius / 2;
+    ctx.stroke(path);
+
+    return path;
+  },
+  redrawImages: function ({ deltaCoords }) {
+    this.imgs.forEach((img, index) => {
+      if (this.selectedPointIndex === index) {
+        this.points[index][0] = this.changeEditableCoords({
+          coords: this.points[index][0],
+          changeCoords: deltaCoords,
+        });
+      }
+      this.drawImage({
+        img,
+        coords: this.points[index][0],
+        isActive: this.selectedPointIndex === index,
+      });
+    });
   },
   drawEditRects: function (rect, coords) {
     rect.rect(...coords, editPointRadius, editPointRadius);
@@ -271,6 +468,30 @@ export const canvasHelpers: canvasHelpersType = {
     return imgWidth / imgHeight > this.width / this.height
       ? [0, 0, this.width, Math.floor((imgHeight / imgWidth) * this.width)]
       : [0, 0, Math.floor((imgWidth / imgHeight) * this.height), this.height];
+  },
+  changeToolsCoords: function ({
+    coords,
+    changeCoords,
+    startCoords,
+    endCoords,
+    type,
+  }) {
+    switch (type || this.toolType) {
+      case toolTypesEnum.line:
+        return [
+          ...(this.toolType
+            ? startCoords || [coords[0], coords[1]]
+            : [coords[0] + changeCoords[0], coords[1] + changeCoords[1]]),
+          ...(this.toolType
+            ? endCoords || [
+                coords[2] + changeCoords[0],
+                coords[3] + changeCoords[1],
+              ]
+            : [coords[2] + changeCoords[0], coords[3] + changeCoords[1]]),
+        ] as canvasCoordsType;
+      default:
+        return [0, 0, 0, 0];
+    }
   },
   changeEditableCoords: function ({ coords, changeCoords }) {
     return this.prepareEditableCoords({
