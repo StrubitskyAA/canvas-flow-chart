@@ -1,6 +1,6 @@
 import _ from "lodash";
 
-import { canvasCoordsType, canvasHelpersType } from "./typescript";
+import { canvasHelpersType } from "./typescript";
 import { itemDataType } from "./tree";
 
 import {
@@ -11,7 +11,14 @@ import {
   toolTypesEnum,
 } from "./constants";
 
-import { getToolLength } from "./calculate-helpers";
+import {
+  calculateCoords,
+  getPointCoords,
+  getToolLength,
+  isPointInRectCheck,
+  changeEditableCoords,
+  changeToolsCoords,
+} from "./calculate-helpers";
 
 export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
   const result: string[] = res || [];
@@ -176,7 +183,7 @@ export const canvasHelpers: canvasHelpersType = {
     }
   },
   drawImage: function ({ img, coords, isActive }) {
-    const imgCoords = coords || this.calculateCoords(img);
+    const imgCoords = coords || calculateCoords(img, this.width, this.height);
 
     (this.ctx as CanvasRenderingContext2D).drawImage(img, ...imgCoords);
     if (this.isImageEditMode && this.ctx) {
@@ -192,7 +199,7 @@ export const canvasHelpers: canvasHelpersType = {
         : editPointColor;
 
       editRects.forEach((rect, index) => {
-        const pointCoords = this.getPointCoords(imgCoords, index);
+        const pointCoords = getPointCoords(imgCoords, index);
 
         this.drawEditRects(rect, pointCoords);
       });
@@ -320,7 +327,7 @@ export const canvasHelpers: canvasHelpersType = {
             return isPointInPath;
           });
           if (
-            this.isPointInRectCheck({
+            isPointInRectCheck({
               coords: this.points[i][0],
               x: e.offsetX,
               y: e.offsetY,
@@ -407,12 +414,13 @@ export const canvasHelpers: canvasHelpersType = {
     }
     this.tools.forEach((tool, index) => {
       if (this.selectedToolIndex === index) {
-        tool.coords = this.changeToolsCoords({
+        tool.coords = changeToolsCoords({
           coords: tool.coords,
           changeCoords: deltaCoords,
           startCoords,
           endCoords,
           type: tool.type,
+          toolType: this.toolType,
         });
       }
       this.drawTool({
@@ -446,9 +454,12 @@ export const canvasHelpers: canvasHelpersType = {
   redrawImages: function ({ deltaCoords }) {
     this.imgs.forEach((img, index) => {
       if (this.selectedPointIndex === index) {
-        this.points[index][0] = this.changeEditableCoords({
+        this.points[index][0] = changeEditableCoords({
           coords: this.points[index][0],
           changeCoords: deltaCoords,
+          selectedRectIndex: this.selectedRectIndex,
+          width: this.width,
+          height: this.height,
         });
       }
       this.drawImage({
@@ -461,162 +472,6 @@ export const canvasHelpers: canvasHelpersType = {
   drawEditRects: function (rect, coords) {
     rect.rect(...coords, editPointRadius, editPointRadius);
     (this.ctx as CanvasRenderingContext2D).fill(rect);
-  },
-  calculateCoords: function (img) {
-    const [imgWidth, imgHeight] = [img.offsetWidth, img.offsetHeight];
-
-    return imgWidth / imgHeight > this.width / this.height
-      ? [0, 0, this.width, Math.floor((imgHeight / imgWidth) * this.width)]
-      : [0, 0, Math.floor((imgWidth / imgHeight) * this.height), this.height];
-  },
-  changeToolsCoords: function ({
-    coords,
-    changeCoords,
-    startCoords,
-    endCoords,
-    type,
-  }) {
-    switch (type || this.toolType) {
-      case toolTypesEnum.line:
-        return [
-          ...(this.toolType
-            ? startCoords || [coords[0], coords[1]]
-            : [coords[0] + changeCoords[0], coords[1] + changeCoords[1]]),
-          ...(this.toolType
-            ? endCoords || [
-                coords[2] + changeCoords[0],
-                coords[3] + changeCoords[1],
-              ]
-            : [coords[2] + changeCoords[0], coords[3] + changeCoords[1]]),
-        ] as canvasCoordsType;
-      default:
-        return [0, 0, 0, 0];
-    }
-  },
-  changeEditableCoords: function ({ coords, changeCoords }) {
-    return this.prepareEditableCoords({
-      coords,
-      mouseCoords: this.recalcDeltaCoords({ coords, changeCoords }),
-    });
-  },
-  recalcDeltaCoords: function ({ coords, changeCoords }) {
-    switch (this.selectedRectIndex) {
-      case 0:
-        return [coords[0] + changeCoords[0], coords[1] + changeCoords[1]];
-      case 1:
-        return [
-          coords[0] + coords[2] + changeCoords[0],
-          coords[1] + changeCoords[1],
-        ];
-      case 2:
-        return [
-          coords[0] + changeCoords[0],
-          coords[1] + coords[3] + changeCoords[1],
-        ];
-      case 3:
-        return [
-          coords[0] + coords[2] + changeCoords[0],
-          coords[1] + coords[3] + changeCoords[1],
-        ];
-      default:
-        return changeCoords;
-    }
-  },
-  calculateBorderedCoords: function ({
-    start,
-    length,
-    delta,
-    limitMin,
-    limitMax,
-  }) {
-    return start + delta < limitMin
-      ? limitMin
-      : start + delta + length > limitMax
-      ? limitMax - length
-      : start + delta;
-  },
-  prepareEditableCoords: function ({ coords, mouseCoords }) {
-    switch (this.selectedRectIndex) {
-      case 0: {
-        return [
-          mouseCoords[0],
-          mouseCoords[1],
-          coords[2] - mouseCoords[0] + coords[0],
-          coords[3] - mouseCoords[1] + coords[1],
-        ];
-      }
-      case 1:
-        return [
-          coords[0],
-          mouseCoords[1],
-          mouseCoords[0] - coords[0],
-          coords[3] - mouseCoords[1] + coords[1],
-        ];
-      case 2:
-        return [
-          mouseCoords[0],
-          coords[1],
-          coords[0] + coords[2] - mouseCoords[0],
-          mouseCoords[1] - coords[1],
-        ];
-      case 3: {
-        return [
-          coords[0],
-          coords[1],
-          mouseCoords[0] - coords[0],
-          mouseCoords[1] - coords[1],
-        ];
-      }
-      default:
-        return [
-          this.calculateBorderedCoords({
-            start: coords[0],
-            length: coords[2],
-            delta: mouseCoords[0],
-            limitMax: this.width,
-            limitMin: 0,
-          }),
-          this.calculateBorderedCoords({
-            start: coords[1],
-            length: coords[3],
-            delta: mouseCoords[1],
-            limitMax: this.height,
-            limitMin: 0,
-          }),
-          coords[2],
-          coords[3],
-        ];
-    }
-  },
-  getPointCoords: function (coords, index) {
-    switch (index) {
-      case 0:
-        return [coords[0], coords[1]];
-      case 1:
-        return [coords[0] + coords[2] - editPointRadius, coords[1]];
-      case 2:
-        return [coords[0], coords[1] + coords[3] - editPointRadius];
-      case 3:
-        return [
-          coords[0] + coords[2] - editPointRadius,
-          coords[1] + coords[3] - editPointRadius,
-        ];
-      case 4:
-        return [
-          (coords[0] + coords[2] - editPointRadius) / 2,
-          (coords[1] + coords[3] - editPointRadius) / 2,
-        ];
-      default:
-        return [0, 0];
-    }
-  },
-  isPointInRectCheck: function ({ coords, x, y }) {
-    return (
-      x > coords[0] &&
-      x < coords[0] + coords[2] &&
-      y > coords[1] &&
-      y < coords[1] + coords[3]
-    );
   },
   resetState: function () {
     this.isEditing = false;

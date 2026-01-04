@@ -71,8 +71,6 @@ export type canvasHelpersType = {
   editTools: (args: {
     setConfig: Dispatch<SetStateAction<canvasConfigType>>;
   }) => (e: MouseEvent) => void;
-  calculateCoords: (newImg: HTMLImageElement) => canvasCoordsType;
-  getPointCoords: (coords: canvasCoordsType, index: number) => [number, number];
   drawEditRects: (rect: Path2D, coords: pointCoordsType) => void;
   redrawImages: (args: { deltaCoords: pointCoordsType }) => void;
   canvasRedrawTools: (
@@ -89,38 +87,7 @@ export type canvasHelpersType = {
     startCoords?: pointCoordsType;
     endCoords?: pointCoordsType;
   }) => void;
-  changeEditableCoords: (args: {
-    coords: canvasCoordsType;
-    changeCoords: pointCoordsType;
-  }) => canvasCoordsType;
-  changeToolsCoords: (args: {
-    coords: canvasCoordsType;
-    changeCoords: pointCoordsType;
-    startCoords?: pointCoordsType;
-    endCoords?: pointCoordsType;
-    type?: toolTypesEnum;
-  }) => canvasCoordsType;
   drawTool: (args: { tool: toolType; isActive: boolean }) => void;
   drawLine: (args: { tool: toolType; isActive: boolean }) => Path2D;
-  recalcDeltaCoords: (args: {
-    coords: canvasCoordsType;
-    changeCoords: pointCoordsType;
-  }) => [number, number];
-  prepareEditableCoords: (args: {
-    coords: canvasCoordsType;
-    mouseCoords: pointCoordsType;
-  }) => canvasCoordsType;
   resetState: () => void;
-  isPointInRectCheck: (args: {
-    coords: canvasCoordsType;
-    x: number;
-    y: number;
-  }) => boolean;
-  calculateBorderedCoords: (args: {
-    start: number;
-    length: number;
-    delta: number;
-    limitMin: number;
-    limitMax: number;
-  }) => number;
 };
