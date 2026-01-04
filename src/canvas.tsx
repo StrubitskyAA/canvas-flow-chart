@@ -143,6 +143,7 @@ const Canvas: FC = () => {
           onClick={() =>
             setEditMode((isEdit) => {
               setImageEditMode(false);
+              setToolsEditMode(false);
               return !isEdit;
             })
           }

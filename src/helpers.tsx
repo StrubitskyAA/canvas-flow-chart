@@ -303,6 +303,21 @@ export const canvasHelpers: canvasHelpersType = {
                 this.resetState();
               };
             };
+            window.onkeyup = (e: KeyboardEvent) => {
+              if (e.key === "Delete") {
+                const toolIndex = _.clone(this.selectedToolIndex) as number;
+                this.tools = this.tools.filter((tool, i) => i !== toolIndex);
+
+                setConfig((config) => {
+                  return {
+                    ...config,
+                    tools: this.tools,
+                  };
+                });
+                this.resetState();
+                this.selectedToolIndex = null;
+              }
+            };
           }
         }
       }
