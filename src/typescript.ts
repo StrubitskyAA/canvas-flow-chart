@@ -21,6 +21,7 @@ export type toolType = {
   round?: number[];
   path?: Path2D;
   strokeWidth?: number;
+  angle?: number;
 };
 
 export type canvasHelpersType = {

@@ -20,6 +20,7 @@ import {
   changeToolsCoords,
   drawLine,
   drawRect,
+  drawEllipse,
   getToolInitialCoords,
 } from "./calculate-helpers";
 
@@ -463,6 +464,13 @@ export const canvasHelpers: canvasHelpersType = {
         }
         case toolTypesEnum.rect: {
           args.tool.path = drawRect({
+            ...args,
+            ctx: this.ctx as CanvasRenderingContext2D,
+          });
+          break;
+        }
+        case toolTypesEnum.circle: {
+          args.tool.path = drawEllipse({
             ...args,
             ctx: this.ctx as CanvasRenderingContext2D,
           });

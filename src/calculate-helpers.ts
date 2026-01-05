@@ -1,6 +1,6 @@
 import { canvasCoordsType, pointCoordsType, toolType } from "./typescript";
 
-import { editPointRadius, toolTypesEnum } from "./constants";
+import { editPointRadius, toolTypesEnum, transparentColor } from "./constants";
 
 const calcLineLength = (coords: canvasCoordsType) =>
   Math.sqrt(
@@ -253,6 +253,25 @@ export const changeToolsCoords = ({
           ? [coords[2] + changeCoords[0], coords[3] + changeCoords[1]]
           : [coords[2], coords[3]]),
       ] as canvasCoordsType;
+    case toolTypesEnum.circle:
+      return [
+        ...(toolType
+          ? startCoords && endCoords
+            ? [
+                Math.min(startCoords[0], endCoords[0]) +
+                  Math.abs(Math.floor((startCoords[0] - endCoords[0]) / 2)),
+                Math.min(startCoords[1], endCoords[1]) +
+                  Math.abs(Math.floor((startCoords[1] - endCoords[1]) / 2)),
+              ]
+            : [coords[0], coords[1]]
+          : [coords[0] + changeCoords[0], coords[1] + changeCoords[1]]),
+        ...(toolType && startCoords && endCoords
+          ? [
+              Math.abs(Math.floor((startCoords[0] - endCoords[0]) / 2)),
+              Math.abs(Math.floor((startCoords[1] - endCoords[1]) / 2)),
+            ]
+          : [coords[2], coords[3]]),
+      ] as canvasCoordsType;
     default:
       return [0, 0, 0, 0];
   }
@@ -272,7 +291,7 @@ export const drawLine = ({
   path.lineTo(tool.coords[2], tool.coords[3]);
   ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
   ctx.lineWidth = editPointRadius / 2;
-  ctx.stroke(path);
+  if (tool.stroke !== transparentColor) ctx.stroke(path);
 
   return path;
 };
@@ -299,8 +318,36 @@ export const drawRect = ({
   ctx.fillStyle = isActive ? "cyan" : (tool.fill as string) || "black";
   ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
   ctx.lineWidth = tool.strokeWidth || editPointRadius / 4;
-  ctx.fill(path);
-  ctx.stroke(path);
+  if (tool.fill !== transparentColor) ctx.fill(path);
+  if (tool.stroke !== transparentColor) ctx.stroke(path);
+
+  return path;
+};
+
+export const drawEllipse = ({
+  tool,
+  isActive,
+  ctx,
+}: {
+  tool: toolType;
+  isActive: boolean;
+  ctx: CanvasRenderingContext2D;
+}): Path2D => {
+  const path = new Path2D();
+  path.ellipse(
+    tool.coords[0],
+    tool.coords[1],
+    tool.coords[2],
+    tool.coords[3],
+    tool.angle || 0,
+    0,
+    2 * Math.PI
+  );
+  ctx.fillStyle = isActive ? "cyan" : (tool.fill as string) || "black";
+  ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
+  ctx.lineWidth = tool.strokeWidth || editPointRadius / 4;
+  if (tool.fill !== transparentColor) ctx.fill(path);
+  if (tool.stroke !== transparentColor) ctx.stroke(path);
 
   return path;
 };
