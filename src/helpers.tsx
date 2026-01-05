@@ -18,6 +18,9 @@ import {
   isPointInRectCheck,
   changeEditableCoords,
   changeToolsCoords,
+  drawLine,
+  drawRect,
+  getToolInitialCoords,
 } from "./calculate-helpers";
 
 export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
@@ -424,7 +427,10 @@ export const canvasHelpers: canvasHelpersType = {
     if ((this.selectedToolIndex as number) === this.tools.length) {
       this.tools.push({
         type: this.toolType as toolTypesEnum,
-        coords: [...(startCoords || [0, 0]), ...(startCoords || [0, 0])],
+        coords: getToolInitialCoords({
+          startCoords,
+          toolType: this.toolType as toolTypesEnum,
+        }),
       });
     }
     this.tools.forEach((tool, index) => {
@@ -449,22 +455,21 @@ export const canvasHelpers: canvasHelpersType = {
       this.ctx.beginPath();
       switch (args.tool.type) {
         case toolTypesEnum.line: {
-          args.tool.path = this.drawLine(args);
+          args.tool.path = drawLine({
+            ...args,
+            ctx: this.ctx as CanvasRenderingContext2D,
+          });
+          break;
+        }
+        case toolTypesEnum.rect: {
+          args.tool.path = drawRect({
+            ...args,
+            ctx: this.ctx as CanvasRenderingContext2D,
+          });
           break;
         }
       }
     }
-  },
-  drawLine: function ({ tool, isActive }) {
-    const ctx = this.ctx as CanvasRenderingContext2D;
-    const path = new Path2D();
-    path.moveTo(tool.coords[0], tool.coords[1]);
-    path.lineTo(tool.coords[2], tool.coords[3]);
-    ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
-    ctx.lineWidth = editPointRadius / 2;
-    ctx.stroke(path);
-
-    return path;
   },
   redrawImages: function ({ deltaCoords }) {
     this.imgs.forEach((img, index) => {

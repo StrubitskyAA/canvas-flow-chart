@@ -18,8 +18,9 @@ export type toolType = {
   type: toolTypesEnum;
   fill?: string | number;
   stroke?: string | number;
-  round?: string | number[];
+  round?: number[];
   path?: Path2D;
+  strokeWidth?: number;
 };
 
 export type canvasHelpersType = {
@@ -88,6 +89,5 @@ export type canvasHelpersType = {
     endCoords?: pointCoordsType;
   }) => void;
   drawTool: (args: { tool: toolType; isActive: boolean }) => void;
-  drawLine: (args: { tool: toolType; isActive: boolean }) => Path2D;
   resetState: () => void;
 };

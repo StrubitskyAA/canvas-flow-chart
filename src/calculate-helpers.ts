@@ -244,6 +244,80 @@ export const changeToolsCoords = ({
             ]
           : [coords[2] + changeCoords[0], coords[3] + changeCoords[1]]),
       ] as canvasCoordsType;
+    case toolTypesEnum.rect:
+      return [
+        ...(toolType
+          ? startCoords || [coords[0], coords[1]]
+          : [coords[0] + changeCoords[0], coords[1] + changeCoords[1]]),
+        ...(toolType
+          ? [coords[2] + changeCoords[0], coords[3] + changeCoords[1]]
+          : [coords[2], coords[3]]),
+      ] as canvasCoordsType;
+    default:
+      return [0, 0, 0, 0];
+  }
+};
+
+export const drawLine = ({
+  tool,
+  isActive,
+  ctx,
+}: {
+  tool: toolType;
+  isActive: boolean;
+  ctx: CanvasRenderingContext2D;
+}): Path2D => {
+  const path = new Path2D();
+  path.moveTo(tool.coords[0], tool.coords[1]);
+  path.lineTo(tool.coords[2], tool.coords[3]);
+  ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
+  ctx.lineWidth = editPointRadius / 2;
+  ctx.stroke(path);
+
+  return path;
+};
+
+export const drawRect = ({
+  tool,
+  isActive,
+  ctx,
+}: {
+  tool: toolType;
+  isActive: boolean;
+  ctx: CanvasRenderingContext2D;
+}): Path2D => {
+  const path = new Path2D();
+  tool.round
+    ? path.roundRect(
+        tool.coords[0],
+        tool.coords[1],
+        tool.coords[2],
+        tool.coords[3],
+        tool.round
+      )
+    : path.rect(tool.coords[0], tool.coords[1], tool.coords[2], tool.coords[3]);
+  ctx.fillStyle = isActive ? "cyan" : (tool.fill as string) || "black";
+  ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
+  ctx.lineWidth = tool.strokeWidth || editPointRadius / 4;
+  ctx.fill(path);
+  ctx.stroke(path);
+
+  return path;
+};
+
+export const getToolInitialCoords = ({
+  startCoords,
+  toolType,
+}: {
+  startCoords?: pointCoordsType;
+  toolType: toolTypesEnum;
+}): canvasCoordsType => {
+  switch (toolType) {
+    case toolTypesEnum.line: {
+      return [...(startCoords || [0, 0]), ...(startCoords || [0, 0])];
+    }
+    case toolTypesEnum.rect:
+      return [...(startCoords || [0, 0]), 0, 0];
     default:
       return [0, 0, 0, 0];
   }
