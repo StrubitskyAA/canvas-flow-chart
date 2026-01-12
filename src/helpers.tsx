@@ -1,6 +1,13 @@
 import _ from "lodash";
+import { Dispatch, SetStateAction } from "react";
 
-import { canvasHelpersType } from "./typescript";
+import {
+  canvasConfigType,
+  canvasCoordsType,
+  editPointType,
+  pointCoordsType,
+  toolType,
+} from "./typescript";
 import { itemDataType } from "./tree";
 
 import {
@@ -22,6 +29,7 @@ import {
   drawRect,
   drawEllipse,
   getToolInitialCoords,
+  drawSwitch,
 } from "./calculate-helpers";
 
 export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
@@ -34,45 +42,79 @@ export const getAllItemIds = (data: itemDataType[], res?: string[]) => {
   return result;
 };
 
-export const canvasHelpers: canvasHelpersType = {
-  imgs: [],
-  isEditMode: false,
-  isImageEditMode: false,
-  isToolsEditMode: false,
-  isEditing: false,
-  toolType: null,
-  height: 0,
-  width: 0,
-  ctx: null,
-  points: [],
-  tools: [],
-  canvas: null,
-  selectedPointIndex: null,
-  selectedToolIndex: null,
-  selectedRectIndex: null,
-  setEditingMode: function ({
+class Canvas {
+  imgs: HTMLImageElement[];
+  isEditing: boolean;
+  isEditMode: boolean;
+  isImageEditMode: boolean;
+  isToolsEditMode: boolean;
+  toolType: toolTypesEnum | null;
+  height: number;
+  width: number;
+  canvas: HTMLCanvasElement | null;
+  ctx: CanvasRenderingContext2D | null;
+  points: editPointType[];
+  tools: toolType[];
+  selectedPointIndex: number | null;
+  selectedToolIndex: number | null;
+  selectedRectIndex: number | null;
+
+  constructor() {
+    this.imgs = [];
+    this.isEditMode = false;
+    this.isImageEditMode = false;
+    this.isToolsEditMode = false;
+    this.isEditing = false;
+    this.toolType = null;
+    this.height = 0;
+    this.width = 0;
+    this.ctx = null;
+    this.points = [];
+    this.tools = [];
+    this.canvas = null;
+    this.selectedPointIndex = null;
+    this.selectedToolIndex = null;
+    this.selectedRectIndex = null;
+  }
+
+  setConfiguration({
     isEditMode,
     isImageEditMode,
     isToolsEditMode,
     toolType,
     config,
     setConfig,
+  }: {
+    isEditMode: boolean;
+    isToolsEditMode: boolean;
+    isImageEditMode: boolean;
+    toolType: toolTypesEnum | null;
+    config: canvasConfigType;
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
   }) {
     this.isEditMode = isEditMode;
     this.isImageEditMode = isImageEditMode;
     this.isToolsEditMode = isToolsEditMode;
     this.toolType = toolType;
-    this.canvasRedraw({ config, setConfig });
+    this.update({ config, setConfig });
     if (this.canvas && this.isEditMode && !this.isEditing) {
       this.canvas.onmousemove = this.editCanvas({ setConfig });
     }
-  },
-  canvasDrow: function ({
+  }
+  initialization({
     canvas,
     config,
     setConfig,
     canvasHeight,
     canvasWidth,
+    setEditableToolIndex,
+  }: {
+    canvas: HTMLCanvasElement;
+    config: canvasConfigType;
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+    canvasHeight: number;
+    canvasWidth: number;
+    setEditableToolIndex: Dispatch<SetStateAction<number | null>>;
   }) {
     this.height = canvasHeight;
     this.width = canvasWidth;
@@ -106,9 +148,7 @@ export const canvasHelpers: canvasHelpersType = {
                 );
                 newImg.setAttribute("class", "hidden back");
                 this.imgs.push(newImg);
-                newImg.addEventListener("load", (e) => {
-                  resolve(newImg);
-                });
+                newImg.onload = (e) => resolve(newImg);
               })
           )
         ).then((imgs) => {
@@ -122,20 +162,34 @@ export const canvasHelpers: canvasHelpersType = {
             this.points.push(point);
           });
 
-          this.canvasRedrawTools(config, setConfig);
+          this.updateTools(config, setConfig);
         });
       } else {
-        this.canvasRedrawTools(config, setConfig);
+        this.updateTools(config, setConfig);
       }
+      canvas.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (
+          this.isToolsEditMode &&
+          !this.toolType &&
+          _.isNumber(this.selectedToolIndex)
+        ) {
+          const index = this.selectedToolIndex;
+          setEditableToolIndex(index);
+        }
+      };
     }
-  },
-  editCanvas: function (args) {
-    return (e) => {
+  }
+  editCanvas(args: { setConfig: Dispatch<SetStateAction<canvasConfigType>> }) {
+    return (e: MouseEvent) => {
       this.editImages(args)(e);
       this.editTools(args)(e);
     };
-  },
-  canvasRedrawTools: function (config, setConfig) {
+  }
+  updateTools(
+    config: canvasConfigType,
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>
+  ) {
     if (config && config.tools.length) {
       this.tools = config.tools;
       this.tools.forEach((tool, i) => {
@@ -150,8 +204,14 @@ export const canvasHelpers: canvasHelpersType = {
         });
       }
     }
-  },
-  canvasRedraw: function ({ config, setConfig }) {
+  }
+  update({
+    config,
+    setConfig,
+  }: {
+    config: canvasConfigType;
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+  }) {
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
       if (!this.isImageEditMode) {
@@ -183,10 +243,18 @@ export const canvasHelpers: canvasHelpersType = {
           });
         }
       }
-      this.canvasRedrawTools(config, setConfig);
+      this.updateTools(config, setConfig);
     }
-  },
-  drawImage: function ({ img, coords, isActive }) {
+  }
+  drawImage({
+    img,
+    coords,
+    isActive,
+  }: {
+    img: HTMLImageElement;
+    coords: canvasCoordsType | null;
+    isActive: boolean;
+  }): editPointType {
     const imgCoords = coords || calculateCoords(img, this.width, this.height);
 
     (this.ctx as CanvasRenderingContext2D).drawImage(img, ...imgCoords);
@@ -212,9 +280,13 @@ export const canvasHelpers: canvasHelpersType = {
     }
 
     return [imgCoords, []];
-  },
-  editTools: function ({ setConfig }) {
-    return (event) => {
+  }
+  editTools({
+    setConfig,
+  }: {
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+  }) {
+    return (event: MouseEvent) => {
       if (this.isToolsEditMode && this.canvas) {
         if (!!this.toolType) {
           this.canvas.onmousedown = (ev: MouseEvent) => {
@@ -231,7 +303,7 @@ export const canvasHelpers: canvasHelpersType = {
                 endCoords: [e.offsetX, e.offsetY],
               });
             };
-            (this.canvas as HTMLCanvasElement).onmouseup = (e: MouseEvent) => {
+            window.onmouseup = (e: MouseEvent) => {
               const tools = _.clone(this.tools);
               const index = this.selectedToolIndex as number;
               const length = getToolLength(tools[index]);
@@ -295,15 +367,12 @@ export const canvasHelpers: canvasHelpersType = {
                   deltaCoords: [e.movementX, e.movementY],
                 });
               };
-              (this.canvas as HTMLCanvasElement).onmouseup = (
-                e: MouseEvent
-              ) => {
+              window.onmouseup = (e: MouseEvent) => {
                 const tools = _.clone(this.tools);
                 setConfig((config) => ({
                   ...config,
                   tools,
                 }));
-                this.selectedToolIndex = null;
                 this.resetState();
               };
             };
@@ -326,9 +395,13 @@ export const canvasHelpers: canvasHelpersType = {
         }
       }
     };
-  },
-  editImages: function ({ setConfig }) {
-    return (e) => {
+  }
+  editImages({
+    setConfig,
+  }: {
+    setConfig: Dispatch<SetStateAction<canvasConfigType>>;
+  }) {
+    return (e: MouseEvent) => {
       if (this.isImageEditMode) {
         for (let i = this.points.length - 1; i > -1; i--) {
           this.points[i][1].some((rect, index) => {
@@ -373,7 +446,7 @@ export const canvasHelpers: canvasHelpersType = {
                 deltaCoords: [e.movementX, e.movementY],
               });
             };
-            canvas.onmouseup = (e: MouseEvent) => {
+            window.onmouseup = (e: MouseEvent) => {
               const pointIndex = _.clone(this.selectedPointIndex);
               setConfig((config) => ({
                 ...config,
@@ -416,15 +489,31 @@ export const canvasHelpers: canvasHelpersType = {
         }
       }
     };
-  },
-  updateCanvas: function ({ deltaCoords, startCoords, endCoords }) {
+  }
+  updateCanvas({
+    deltaCoords,
+    startCoords,
+    endCoords,
+  }: {
+    deltaCoords: pointCoordsType;
+    startCoords?: pointCoordsType;
+    endCoords?: pointCoordsType;
+  }) {
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
       this.redrawImages({ deltaCoords });
       this.redrawTools({ deltaCoords, startCoords, endCoords });
     }
-  },
-  redrawTools: function ({ deltaCoords, startCoords, endCoords }) {
+  }
+  redrawTools({
+    deltaCoords,
+    startCoords,
+    endCoords,
+  }: {
+    deltaCoords: pointCoordsType;
+    startCoords?: pointCoordsType;
+    endCoords?: pointCoordsType;
+  }) {
     if ((this.selectedToolIndex as number) === this.tools.length) {
       this.tools.push({
         type: this.toolType as toolTypesEnum,
@@ -450,13 +539,20 @@ export const canvasHelpers: canvasHelpersType = {
         isActive: !this.toolType && this.selectedToolIndex === index,
       });
     });
-  },
-  drawTool: function (args) {
+  }
+  drawTool(args: { tool: toolType; isActive: boolean }) {
     if (this.ctx) {
       this.ctx.beginPath();
       switch (args.tool.type) {
         case toolTypesEnum.line: {
           args.tool.path = drawLine({
+            ...args,
+            ctx: this.ctx as CanvasRenderingContext2D,
+          });
+          break;
+        }
+        case toolTypesEnum.switch: {
+          args.tool.path = drawSwitch({
             ...args,
             ctx: this.ctx as CanvasRenderingContext2D,
           });
@@ -478,8 +574,8 @@ export const canvasHelpers: canvasHelpersType = {
         }
       }
     }
-  },
-  redrawImages: function ({ deltaCoords }) {
+  }
+  redrawImages({ deltaCoords }: { deltaCoords: pointCoordsType }) {
     this.imgs.forEach((img, index) => {
       if (this.selectedPointIndex === index) {
         this.points[index][0] = changeEditableCoords({
@@ -496,18 +592,20 @@ export const canvasHelpers: canvasHelpersType = {
         isActive: this.selectedPointIndex === index,
       });
     });
-  },
-  drawEditRects: function (rect, coords) {
+  }
+  drawEditRects(rect: Path2D, coords: pointCoordsType) {
     rect.rect(...coords, editPointRadius, editPointRadius);
     (this.ctx as CanvasRenderingContext2D).fill(rect);
-  },
-  resetState: function () {
+  }
+  resetState() {
     this.isEditing = false;
     if (this.canvas) {
       this.canvas.onmousemove = null;
       this.canvas.onmousedown = null;
-      this.canvas.onmouseup = null;
+      window.onmouseup = null;
     }
     window.onkeyup = null;
-  },
-};
+  }
+}
+
+export const CanvasHelpers = new Canvas();

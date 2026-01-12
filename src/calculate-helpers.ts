@@ -1,6 +1,17 @@
+import _ from "lodash";
+
 import { canvasCoordsType, pointCoordsType, toolType } from "./typescript";
 
-import { editPointRadius, toolTypesEnum, transparentColor } from "./constants";
+import {
+  activeColor,
+  editPointRadius,
+  initialColor,
+  minToolLength,
+  toolTypesEnum,
+  transparentColor,
+} from "./constants";
+
+import GetStringSvg from "./svg/get-string-svg";
 
 const calcLineLength = (coords: canvasCoordsType) =>
   Math.sqrt(
@@ -12,7 +23,8 @@ const calcRectLength = (coords: canvasCoordsType) =>
 export const getToolLength = (tool: toolType) => {
   if (!tool) return 0;
   switch (tool.type) {
-    case toolTypesEnum.line: {
+    case toolTypesEnum.line:
+    case toolTypesEnum.switch: {
       return calcLineLength(tool.coords);
     }
     default:
@@ -233,6 +245,7 @@ export const changeToolsCoords = ({
 }): canvasCoordsType => {
   switch (type || toolType) {
     case toolTypesEnum.line:
+    case toolTypesEnum.switch:
       return [
         ...(toolType
           ? startCoords || [coords[0], coords[1]]
@@ -289,11 +302,153 @@ export const drawLine = ({
   const path = new Path2D();
   path.moveTo(tool.coords[0], tool.coords[1]);
   path.lineTo(tool.coords[2], tool.coords[3]);
-  ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
-  ctx.lineWidth = editPointRadius / 2;
-  if (tool.stroke !== transparentColor) ctx.stroke(path);
+  ctx.strokeStyle = isActive
+    ? activeColor
+    : (tool.stroke as string) || initialColor;
+  ctx.lineWidth = tool.strokeWidth || editPointRadius / 2;
+  ctx.stroke(path);
 
   return path;
+};
+
+const calcMiddleCoord = (coordStart: number, coordEnd: number, ratio: number) =>
+  Math.round((coordEnd - coordStart) * ratio) + coordStart;
+const calcLineAngle = (coords: canvasCoordsType) =>
+  Math.atan((coords[3] - coords[1]) / (coords[2] - coords[0]));
+
+export const drawSwitch = ({
+  tool,
+  isActive,
+  ctx,
+}: {
+  tool: toolType;
+  isActive: boolean;
+  ctx: CanvasRenderingContext2D;
+}) => {
+  const path = drawLine({
+    tool: { ...tool, stroke: "transparent" },
+    isActive: false,
+    ctx,
+  });
+  const length = calcLineLength(tool.coords);
+
+  if (length < minToolLength) {
+    drawLine({
+      tool: tool,
+      isActive: true,
+      ctx,
+    });
+  } else {
+    const ratio = (length - minToolLength) / 2 / length;
+    const middleCoords = [
+      calcMiddleCoord(tool.coords[0], tool.coords[2], ratio),
+      calcMiddleCoord(tool.coords[1], tool.coords[3], ratio),
+      calcMiddleCoord(tool.coords[2], tool.coords[0], ratio),
+      calcMiddleCoord(tool.coords[3], tool.coords[1], ratio),
+    ];
+    const angle = calcLineAngle(tool.coords);
+
+    drawLine({
+      tool: {
+        ...tool,
+        coords: [
+          tool.coords[0],
+          tool.coords[1],
+          middleCoords[0],
+          middleCoords[1],
+        ],
+      },
+      isActive,
+      ctx,
+    });
+    drawLine({
+      tool: {
+        ...tool,
+        coords: [
+          middleCoords[2],
+          middleCoords[3],
+          tool.coords[2],
+          tool.coords[3],
+        ],
+      },
+      isActive,
+      ctx,
+    });
+    drawSvg({
+      startCoords: [tool.coords[0], tool.coords[1]],
+      tool: {
+        coords: [
+          tool.coords[0] + Math.round((length - minToolLength) / 2) - 2,
+          tool.coords[1] - Math.round(minToolLength / 2),
+          minToolLength + 4,
+          minToolLength,
+        ],
+        type: toolTypesEnum.switch,
+        angle: tool.coords[0] > tool.coords[2] ? Math.PI + angle : angle,
+        strokeWidth: tool.strokeWidth,
+      },
+      isActive,
+      isOpen: true,
+      ctx,
+    });
+  }
+
+  return path;
+};
+
+const getImgAttribute = (
+  type: toolTypesEnum,
+  isActive: boolean,
+  isOpen?: boolean
+) => `${type}${isActive ? "-active" : ""}${isOpen ? "-open" : ""}`;
+
+export const drawSvg = ({
+  startCoords,
+  tool,
+  isActive,
+  isOpen,
+  ctx,
+}: {
+  startCoords: pointCoordsType;
+  tool: toolType;
+  isActive: boolean;
+  isOpen?: boolean;
+  ctx: CanvasRenderingContext2D;
+}) => {
+  const svgString = GetStringSvg({
+    isActive,
+    isOpen,
+    stroke: tool.stroke as string,
+    type: tool.type,
+    strokeWidth: tool.strokeWidth,
+  });
+  let img: HTMLImageElement = document.querySelector(
+    `[img-data="${getImgAttribute(tool.type, isActive, isOpen)}"]`
+  ) as HTMLImageElement;
+  ctx.translate(startCoords[0], startCoords[1]);
+  ctx.rotate(tool.angle as number);
+  ctx.translate(-startCoords[0], -startCoords[1]);
+  if (!img) {
+    const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(svgBlob);
+    img = document.createElement("img");
+    document.body.appendChild(img);
+    img.setAttribute("src", URL.createObjectURL(svgBlob));
+    img.setAttribute("class", "hidden back");
+    img.setAttribute("img-data", getImgAttribute(tool.type, isActive, isOpen));
+    img.onload = function () {
+      ctx.drawImage(img, tool.coords[0], tool.coords[1]);
+      ctx.translate(startCoords[0], startCoords[1]);
+      ctx.rotate(-(tool.angle as number));
+      ctx.translate(-startCoords[0], -startCoords[1]);
+    };
+    img.src = url;
+  } else {
+    ctx.drawImage(img, tool.coords[0], tool.coords[1]);
+    ctx.translate(startCoords[0], startCoords[1]);
+    ctx.rotate(-(tool.angle as number));
+    ctx.translate(-startCoords[0], -startCoords[1]);
+  }
 };
 
 export const drawRect = ({
@@ -312,17 +467,42 @@ export const drawRect = ({
         tool.coords[1],
         tool.coords[2],
         tool.coords[3],
-        tool.round
+        _.toNumber(tool.round) || 0
       )
     : path.rect(tool.coords[0], tool.coords[1], tool.coords[2], tool.coords[3]);
-  ctx.fillStyle = isActive ? "cyan" : (tool.fill as string) || "black";
-  ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
+  ctx.fillStyle = isActive
+    ? activeColor
+    : (tool.fill as string) || initialColor;
+  ctx.strokeStyle = isActive
+    ? activeColor
+    : (tool.stroke as string) || initialColor;
   ctx.lineWidth = tool.strokeWidth || editPointRadius / 4;
-  if (tool.fill !== transparentColor) ctx.fill(path);
-  if (tool.stroke !== transparentColor) ctx.stroke(path);
+  ctx.rotate(0);
+  const [centrX, centrY] = [
+    tool.coords[0] + Math.floor(tool.coords[2] / 2),
+    tool.coords[1] + Math.floor(tool.coords[3] / 2),
+  ];
+  const angle = getAngleInRadians(tool.angle);
+  if (tool.fill !== transparentColor) {
+    if (angle) {
+      ctx.translate(centrX, centrY);
+      ctx.rotate(angle);
+      ctx.translate(-centrX, -centrY);
+    }
+    ctx.fill(path);
+    ctx.stroke(path);
+    if (tool.angle) {
+      ctx.translate(centrX, centrY);
+      ctx.rotate(-angle);
+      ctx.translate(-centrX, -centrY);
+    }
+  }
 
   return path;
 };
+
+const getAngleInRadians = (angle?: string | number) =>
+  (_.toNumber(angle || 0) / 180) * Math.PI;
 
 export const drawEllipse = ({
   tool,
@@ -339,12 +519,16 @@ export const drawEllipse = ({
     tool.coords[1],
     tool.coords[2],
     tool.coords[3],
-    tool.angle || 0,
+    getAngleInRadians(tool.angle),
     0,
     2 * Math.PI
   );
-  ctx.fillStyle = isActive ? "cyan" : (tool.fill as string) || "black";
-  ctx.strokeStyle = isActive ? "cyan" : (tool.stroke as string) || "black";
+  ctx.fillStyle = isActive
+    ? activeColor
+    : (tool.fill as string) || initialColor;
+  ctx.strokeStyle = isActive
+    ? activeColor
+    : (tool.stroke as string) || initialColor;
   ctx.lineWidth = tool.strokeWidth || editPointRadius / 4;
   if (tool.fill !== transparentColor) ctx.fill(path);
   if (tool.stroke !== transparentColor) ctx.stroke(path);

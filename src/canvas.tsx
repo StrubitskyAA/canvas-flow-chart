@@ -7,12 +7,18 @@ import {
   useState,
 } from "react";
 import { Box, IconButton } from "@mui/material";
+import _ from "lodash";
 
 import { canvasConfigType } from "./typescript";
 
-import { defaultCanvasConfig, toolTypesEnum } from "./constants";
+import {
+  defaultCanvasConfig,
+  editErrorColor,
+  editPointColor,
+  toolTypesEnum,
+} from "./constants";
 
-import { canvasHelpers } from "./helpers";
+import { CanvasHelpers } from "./helpers";
 
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import EditIcon from "@mui/icons-material/Edit";
@@ -21,6 +27,8 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import Crop169Icon from "@mui/icons-material/Crop169";
 import PanoramaFishEyeIcon from "@mui/icons-material/PanoramaFishEye";
 import TimelineIcon from "@mui/icons-material/Timeline";
+import ToolSettingsModal from "./tool-settins-modal";
+import SwitchSvg from "./svg/switch-svg";
 
 const Canvas: FC = () => {
   const [isEditMode, setEditMode] = useState<boolean>(false);
@@ -32,6 +40,9 @@ const Canvas: FC = () => {
   const [wrapHeight, setWrapHeight] = useState<number>(0);
   const [wrapWidth, setWrapWidth] = useState<number>(0);
   const [toolType, setToolType] = useState<toolTypesEnum | null>(null);
+  const [editableToolIndex, setEditableToolIndex] = useState<number | null>(
+    null
+  );
 
   const setImage = useCallback((img: File | null) => {
     if (img) {
@@ -46,7 +57,7 @@ const Canvas: FC = () => {
   }, []);
 
   useEffect(() => {
-    canvasHelpers.setEditingMode({
+    CanvasHelpers.setConfiguration({
       isEditMode,
       isImageEditMode,
       isToolsEditMode,
@@ -57,12 +68,13 @@ const Canvas: FC = () => {
   }, [isImageEditMode, isToolsEditMode, isEditMode, config, toolType]);
   useEffect(() => {
     if (canvasRef.current)
-      canvasHelpers.canvasDrow({
+      CanvasHelpers.initialization({
         canvas: canvasRef.current as HTMLCanvasElement,
         config,
         setConfig,
         canvasHeight: wrapHeight,
         canvasWidth: wrapWidth,
+        setEditableToolIndex,
       });
   }, [config.images.length, wrapHeight, wrapWidth]);
   useEffect(() => {
@@ -73,96 +85,128 @@ const Canvas: FC = () => {
   }, []);
 
   return (
-    <Box sx={{ display: "flex", flex: 1, flexDirection: "column" }}>
-      <Box>
-        {isToolsEditMode && (
-          <>
+    <>
+      <ToolSettingsModal
+        tool={
+          !_.isNumber(editableToolIndex)
+            ? null
+            : config.tools[editableToolIndex]
+        }
+        setConfig={setConfig}
+        editableToolIndex={editableToolIndex}
+        onClose={() => setEditableToolIndex(null)}
+      />
+      <Box sx={{ display: "flex", flex: 1, flexDirection: "column" }}>
+        <Box>
+          {isToolsEditMode && (
+            <>
+              <IconButton component="label">
+                <Crop169Icon
+                  color={toolType === toolTypesEnum.rect ? "error" : "primary"}
+                  onClick={() => setTooltypeHandler(toolTypesEnum.rect)}
+                />
+              </IconButton>
+              <IconButton
+                component="label"
+                onClick={() => setTooltypeHandler(toolTypesEnum.circle)}
+              >
+                <PanoramaFishEyeIcon
+                  color={
+                    toolType === toolTypesEnum.circle ? "error" : "primary"
+                  }
+                />
+              </IconButton>
+              <IconButton
+                component="label"
+                onClick={() => setTooltypeHandler(toolTypesEnum.line)}
+              >
+                <TimelineIcon
+                  color={toolType === toolTypesEnum.line ? "error" : "primary"}
+                />
+              </IconButton>
+              <IconButton
+                component="label"
+                onClick={() => setTooltypeHandler(toolTypesEnum.switch)}
+              >
+                <SwitchSvg
+                  color={
+                    toolType === toolTypesEnum.switch
+                      ? editErrorColor
+                      : editPointColor
+                  }
+                />
+              </IconButton>
+            </>
+          )}
+          {isImageEditMode && (
             <IconButton component="label">
-              <Crop169Icon
-                color={toolType === toolTypesEnum.rect ? "error" : "primary"}
-                onClick={() => setTooltypeHandler(toolTypesEnum.rect)}
+              <AddPhotoAlternateIcon color="primary" />
+              <input
+                type="file"
+                hidden
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setImage(event.target.files?.[0] || null)
+                }
               />
             </IconButton>
-            <IconButton
-              component="label"
-              onClick={() => setTooltypeHandler(toolTypesEnum.circle)}
-            >
-              <PanoramaFishEyeIcon
-                color={toolType === toolTypesEnum.circle ? "error" : "primary"}
-              />
-            </IconButton>
-            <IconButton
-              component="label"
-              onClick={() => setTooltypeHandler(toolTypesEnum.line)}
-            >
-              <TimelineIcon
-                color={toolType === toolTypesEnum.line ? "error" : "primary"}
-              />
-            </IconButton>
-          </>
-        )}
-        {isImageEditMode && (
-          <IconButton component="label">
-            <AddPhotoAlternateIcon color="primary" />
-            <input
-              type="file"
-              hidden
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                setImage(event.target.files?.[0] || null)
-              }
-            />
-          </IconButton>
-        )}
-        {isEditMode && (
-          <>
-            <IconButton
-              component="label"
-              onClick={() => {
-                setToolsEditMode(false);
-                setToolType(null);
-                setImageEditMode((mode) => !mode);
-              }}
-            >
-              <ImagesearchRollerIcon
-                color={isImageEditMode ? "error" : "primary"}
-              />
-            </IconButton>
-            <IconButton
-              component="label"
-              onClick={() => {
+          )}
+          {isEditMode && (
+            <>
+              <IconButton
+                component="label"
+                onClick={() => {
+                  setToolsEditMode(false);
+                  setToolType(null);
+                  setImageEditMode((mode) => !mode);
+                }}
+              >
+                <ImagesearchRollerIcon
+                  color={isImageEditMode ? "error" : "primary"}
+                />
+              </IconButton>
+              <IconButton
+                component="label"
+                onClick={() => {
+                  setImageEditMode(false);
+                  setToolType(null);
+                  setToolsEditMode((mode) => !mode);
+                }}
+              >
+                <ConstructionIcon
+                  color={isToolsEditMode ? "error" : "primary"}
+                />
+              </IconButton>
+            </>
+          )}
+          <IconButton
+            onClick={() =>
+              setEditMode((isEdit) => {
                 setImageEditMode(false);
-                setToolType(null);
-                setToolsEditMode((mode) => !mode);
-              }}
-            >
-              <ConstructionIcon color={isToolsEditMode ? "error" : "primary"} />
-            </IconButton>
-          </>
-        )}
-        <IconButton
-          onClick={() =>
-            setEditMode((isEdit) => {
-              setImageEditMode(false);
-              setToolsEditMode(false);
-              return !isEdit;
-            })
-          }
+                setToolsEditMode(false);
+                return !isEdit;
+              })
+            }
+          >
+            <EditIcon color={isEditMode ? "error" : "primary"} />
+          </IconButton>
+        </Box>
+        <Box
+          sx={{
+            display: "flex",
+            flex: "auto",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+          ref={canvasWrapRef}
         >
-          <EditIcon color={isEditMode ? "error" : "primary"} />
-        </IconButton>
+          <canvas
+            ref={canvasRef}
+            height={wrapHeight}
+            width={wrapWidth}
+          ></canvas>
+        </Box>
       </Box>
-      <Box
-        sx={{
-          display: "flex",
-          flex: "auto",
-          justifyContent: "center",
-          overflow: "hidden",
-        }}
-        ref={canvasWrapRef}
-      >
-        <canvas ref={canvasRef} height={wrapHeight} width={wrapWidth}></canvas>
-      </Box>
-    </Box>
+    </>
   );
 };
 
